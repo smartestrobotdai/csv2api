@@ -5,6 +5,8 @@ import os
 import pandas as pd
 import gzip
 import io
+import getopt
+import sys
 
 app = web.Application(client_max_size = 1024 * 1024 * 100)
 
@@ -16,19 +18,35 @@ async def getCSV(request):
   print(request.query)
   nrows = int(request.query.get('nrows', 0))
   skiprows = int(request.query.get('skiprows', 0))
+  startpos = int(request.query.get('startpos', 0))
   delimiter = request.query.get('delimiter', ',')
+  columns = request.query.get('columns', '')
+  
+  columns = columns.split(',')
   
   object_id = request.match_info['id']
   path = os.path.join('../csv_files', f'{object_id}.csv')
-  if nrows > 0:
-    df = pd.read_csv(path, skiprows=skiprows, nrows=nrows, low_memory=False, delimiter=delimiter)
-  else:
-    df = pd.read_csv(path, skiprows=skiprows, low_memory=False, delimiter=delimiter)
-    
+  
+  try:
+    if nrows > 0:
+      df = pd.read_csv(path, header=0, skiprows=lambda x: x != 0 and x < startpos+1, 
+                  nrows=nrows, low_memory=False, 
+                  delimiter=delimiter, index_col=None)
+    else:
+      df = pd.read_csv(path, header=0, skiprows=lambda x: x != 0 and x < startpos+1, 
+                  low_memory=False, 
+                  delimiter=delimiter, index_col=None)
+  except FileNotFoundError:
+    return badRequest(web, f"File not found", 400)
+  except Exception as e:
+    return badRequest(web, f"An error occurred: {str(e)}", 400)
+  print("Columns", df.columns)
+  print("Length", len(df))
+  df = df[columns]
   res_json = df.to_json(orient = 'records')
   return web.json_response(res_json)
 
-# curl -H "Content-Encoding: gzip" -F "file=@test2.csv" http://192.168.2.1:9191/api/v1/csv/test2/upload
+# curl -F "file=@test3.csv" http://192.168.2.1:9191/api/v1/csv/upload
 # gzip -c test3_big.csv | curl -X POST  -H "Content-Type: multipart/form-data" -F "file=@-;filename=test3_big.csv.gz" http://192.168.2.1:9191/api/v1/csv/test3_big/upload
 # curl -X POST  -H "Content-Type: multipart/form-data" -F "file=@test3_big.csv" http://192.168.2.1:9191/api/v1/csv/upload
 async def handle_file_upload(request):
@@ -55,11 +73,27 @@ async def handle_file_upload(request):
   
   return web.Response(text=f'Successfully saved file {filename} Size: {size} bytes')
 
-with open('config.json', 'r') as f:
-  config = json.load(f)
-  app.add_routes([web.get('/api/v1/csv/{id}', getCSV),
-                  web.post('/api/v1/csv/upload', handle_file_upload)])
+def main(argv):
+  host = '0.0.0.0'
+  port = 9191
+  with open('config.json', 'r') as f:
+    config = json.load(f)
+    print(config)
+    host = config['host']
+    port = int(config['port'])
+    
+  opts, args = getopt.getopt(argv,"",["ip=", "host="])
   
-  if __name__ == '__main__':
-    web.run_app(app, port=config['port'], host=config['listen-ip'])
-# curl "http://192.168.2.1:9191/api/v1/csv/sp500_stocks?nrows=10&skiprows=10"
+  for opt, arg in opts:
+    if opt in ("--host"):
+      host = arg
+    if opt in ("--port"):
+      port = int(arg)
+
+    app.add_routes([web.get('/api/v1/csv/{id}', getCSV),
+                    web.post('/api/v1/csv/upload', handle_file_upload)])
+    web.run_app(app, port=port, host=host)
+    
+if __name__ == '__main__':
+  main(sys.argv[1:])
+# curl "http://localhost:9191/api/v1/csv/test2?nrows=10&startpos=0&columns=Id,Name&delimiter=%20"
