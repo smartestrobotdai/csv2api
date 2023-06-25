@@ -7,44 +7,101 @@ import gzip
 import io
 import getopt
 import sys
+from sklearn.decomposition import PCA
 
 app = web.Application(client_max_size = 1024 * 1024 * 100)
+
+file_base_dir = '../files'
 
 def badRequest(web, msg, status):
   ret_obj = {"error": {"code": status, "message": f"invalid request format: {msg}"}}
   return web.json_response(ret_obj, status=status)
 
-async def getCSV(request):
-  print(request.query)
-  nrows = int(request.query.get('nrows', 0))
-  skiprows = int(request.query.get('skiprows', 0))
-  startpos = int(request.query.get('startpos', 0))
-  delimiter = request.query.get('delimiter', ',')
+
+def get_output_params(request):
+  output_orient = request.query.get('output_orient', 'records')
+  output_index = request.query.get('output_index', True)
+  return output_orient, output_index
+
+def get_columns(request):
   columns = request.query.get('columns', '')
-  
-  columns = columns.split(',')
-  
-  object_id = request.match_info['id']
-  path = os.path.join('../csv_files', f'{object_id}.csv')
-  
+  columns = [] if columns == '' else columns.split(',')
+  return columns
+
+def get_json_file(request, path):
+  startpos = int(request.query.get('startpos', 0))
+  nrows = int(request.query.get('nrows', 0))
+  columns = get_columns(request)
+  output_orient, output_index = get_output_params(request)
   try:
-    if nrows > 0:
-      df = pd.read_csv(path, header=0, skiprows=lambda x: x != 0 and x < startpos+1, 
-                  nrows=nrows, low_memory=False, 
-                  delimiter=delimiter, index_col=None)
-    else:
-      df = pd.read_csv(path, header=0, skiprows=lambda x: x != 0 and x < startpos+1, 
-                  low_memory=False, 
-                  delimiter=delimiter, index_col=None)
+    df = pd.read_json(path)
   except FileNotFoundError:
     return badRequest(web, f"File not found", 400)
   except Exception as e:
     return badRequest(web, f"An error occurred: {str(e)}", 400)
-  print("Columns", df.columns)
-  print("Length", len(df))
-  df = df[columns]
-  res_json = df.to_json(orient = 'records')
-  return web.json_response(res_json)
+  print(df)
+  print(df.head())
+  if startpos > 0:
+    df = df.loc[startpos:]
+  if nrows > 0:
+    df = df.loc[:nrows]
+  if len(columns) > 0:
+    df = df[columns]
+
+  res_json = df.to_json(orient=output_orient, index=output_index) # type: ignore
+  return web.Response(text=res_json)
+
+
+def get_csv_file(request, path):
+  nrows = int(request.query.get('nrows', 0))
+  skiprows = int(request.query.get('skiprows', 0))
+  startpos = int(request.query.get('startpos', 0))
+  delimiter = request.query.get('delimiter', ',')
+  columns = get_columns(request)
+  output_orient, output_index = get_output_params(request)
+  pca = request.query.get('pca', 0)
+  index_col = request.query.get('index_col', None)
+  if nrows == 0:
+    nrows = None
+
+  
+  try:
+    df = pd.read_csv(path, header=0, skiprows=lambda x: x != 0 and x < startpos+1, 
+              nrows=nrows, low_memory=False, 
+              delimiter=delimiter, index_col=index_col)
+  except FileNotFoundError:
+    return badRequest(web, f"File not found", 404)
+  except Exception as e:
+    return badRequest(web, f"An error occurred: {str(e)}", 400)
+  
+  if len(columns) > 0:
+    df = df[columns]
+    
+  if int(pca) == 1:
+    pca = PCA(n_components=3)
+    data = df.values
+    components = pca.fit_transform(data)
+
+    df_new = pd.DataFrame(components)
+    if index_col is not None:
+      df_new.index = df.index
+    df = df_new
+    
+  res_json = df.to_json(orient=output_orient, index=output_index) # type: ignore
+  return web.Response(text=res_json)
+#  return web.json_response(json.loads(res_json))
+
+
+async def get_file(request):
+  file_name = request.match_info['id']
+  path = os.path.join(file_base_dir, file_name)
+  if path.endswith('.csv'):
+    return get_csv_file(request, path)
+  elif path.endswith('.json'):
+    return get_json_file(request, path)
+  else:
+    return badRequest(web, 'invalid file name', 400)
+  
 
 # curl -F "file=@test3.csv" http://192.168.2.1:9191/api/v1/csv/upload
 # gzip -c test3_big.csv | curl -X POST  -H "Content-Type: multipart/form-data" -F "file=@-;filename=test3_big.csv.gz" http://192.168.2.1:9191/api/v1/csv/test3_big/upload
@@ -76,12 +133,12 @@ async def handle_file_upload(request):
 def main(argv):
   host = '0.0.0.0'
   port = 9191
+  print('starting server')
   with open('config.json', 'r') as f:
     config = json.load(f)
-    print(config)
     host = config['host']
     port = int(config['port'])
-    
+  print('configration loaded', config)
   opts, args = getopt.getopt(argv,"",["ip=", "host="])
   
   for opt, arg in opts:
@@ -90,9 +147,9 @@ def main(argv):
     if opt in ("--port"):
       port = int(arg)
 
-    app.add_routes([web.get('/api/v1/csv/{id}', getCSV),
-                    web.post('/api/v1/csv/upload', handle_file_upload)])
-    web.run_app(app, port=port, host=host)
+  app.add_routes([web.get('/api/v1/{id}', get_file),
+                  web.post('/api/v1/csv/upload', handle_file_upload)])
+  web.run_app(app, port=port, host=host)
     
 if __name__ == '__main__':
   main(sys.argv[1:])
