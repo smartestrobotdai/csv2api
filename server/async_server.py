@@ -33,23 +33,27 @@ def get_json_file(request, path):
   nrows = int(request.query.get('nrows', 0))
   columns = get_columns(request)
   output_orient, output_index = get_output_params(request)
+  condition = request.query.get('condition', '')
+  print('get json, query', request.query)
   try:
     df = pd.read_json(path)
+    if condition:
+      print('condition:', condition)
+      df = df[df.eval(condition)]
+    if startpos > 0:
+      df = df.iloc[startpos:]
+    if nrows > 0:
+      df = df.iloc[:nrows]
+    if len(columns) > 0:
+      df = df[columns]
+    print('ready to send', df)
+    res_json = df.to_json(orient=output_orient, index=output_index) # type: ignore
+    return web.Response(text=res_json)
+  
   except FileNotFoundError:
     return badRequest(web, f"File not found", 400)
   except Exception as e:
     return badRequest(web, f"An error occurred: {str(e)}", 400)
-  print(df)
-  print(df.head())
-  if startpos > 0:
-    df = df.loc[startpos:]
-  if nrows > 0:
-    df = df.loc[:nrows]
-  if len(columns) > 0:
-    df = df[columns]
-
-  res_json = df.to_json(orient=output_orient, index=output_index) # type: ignore
-  return web.Response(text=res_json)
 
 
 def get_csv_file(request, path):
@@ -61,6 +65,7 @@ def get_csv_file(request, path):
   output_orient, output_index = get_output_params(request)
   pca = request.query.get('pca', 0)
   index_col = request.query.get('index_col', None)
+  condition = request.query.get('condition', '')
   if nrows == 0:
     nrows = None
 
@@ -69,26 +74,30 @@ def get_csv_file(request, path):
     df = pd.read_csv(path, header=0, skiprows=lambda x: x != 0 and x < startpos+1, 
               nrows=nrows, low_memory=False, 
               delimiter=delimiter, index_col=index_col)
+    if len(columns) > 0:
+      df = df[columns]
+
+    if condition:
+      df = df[df.eval(condition)]
+      
+    if int(pca) == 1:
+      pca = PCA(n_components=3)
+      data = df.values
+      components = pca.fit_transform(data)
+
+      df_new = pd.DataFrame(components)
+      if index_col is not None:
+        df_new.index = df.index
+      df = df_new
+      
+    res_json = df.to_json(orient=output_orient, index=output_index) # type: ignore
+    return web.Response(text=res_json)
   except FileNotFoundError:
     return badRequest(web, f"File not found", 404)
   except Exception as e:
     return badRequest(web, f"An error occurred: {str(e)}", 400)
   
-  if len(columns) > 0:
-    df = df[columns]
-    
-  if int(pca) == 1:
-    pca = PCA(n_components=3)
-    data = df.values
-    components = pca.fit_transform(data)
 
-    df_new = pd.DataFrame(components)
-    if index_col is not None:
-      df_new.index = df.index
-    df = df_new
-    
-  res_json = df.to_json(orient=output_orient, index=output_index) # type: ignore
-  return web.Response(text=res_json)
 #  return web.json_response(json.loads(res_json))
 
 
