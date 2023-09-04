@@ -1,0 +1,37 @@
+  {
+    "steps": [
+      {
+        "action": "open",
+        "source": "files/problem_descriptions.csv",
+        "delimiter": ",",
+        "skiprows": 0
+      },
+      {
+        "action": "sample",
+        "nrows": 1000
+      },
+      {
+        "action": "select_columns",
+        "columns": ["Document", "Reporting Plant", "Cluster", "WeightVec"]
+      },
+      {
+        "action": "rename_columns",
+        "rename_map": {
+          "Reporting Plant": "Plant"
+        }
+      },
+      {
+        "action": "pca_transform",
+        "column": "WeightVec",
+        "n_components": 3
+      },
+      {
+        "action": "remove_duplicates",
+        "columns": ["Plant", "Cluster"]
+      },
+      {
+        "action": "output",
+        "orient": "records"
+      }
+    ]
+}

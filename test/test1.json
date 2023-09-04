@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "action": "open",
+      "source": "test1.csv",
+      "delimiter": " "
+    },
+    {
+      "action": "sample",
+      "nrows": 10
+    },
+    {
+      "action": "select_columns",
+      "columns": ["Id", "Name"]
+    }
+  ]
+}

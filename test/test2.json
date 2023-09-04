@@ -1,0 +1,25 @@
+{
+  "steps": [
+    {
+      "action": "open",
+      "source": "test1.csv",
+      "delimiter": " "
+    },
+    {
+      "action": "conditions",
+      "conditions": [
+        {
+          "column": "Id",
+          "operator": "contains",
+          "value": "A"
+        },
+        {
+          "column": "Name",
+          "operator": "contains",
+          "value": "B"
+        }
+      ],
+      "condition_logic": "and"
+    }
+  ]
+}
