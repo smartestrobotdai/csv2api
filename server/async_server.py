@@ -9,6 +9,8 @@ import getopt
 import sys
 from sklearn.decomposition import PCA
 
+from pipeline import apply_pipeline
+
 app = web.Application(client_max_size = 1024 * 1024 * 100)
 
 file_base_dir = '../files'
@@ -97,20 +99,21 @@ def get_csv_file(request, path):
   except Exception as e:
     return badRequest(web, f"An error occurred: {str(e)}", 400)
   
-
-#  return web.json_response(json.loads(res_json))
-
-
-async def get_file(request):
-  file_name = request.match_info['id']
-  path = os.path.join(file_base_dir, file_name)
-  if path.endswith('.csv'):
-    return get_csv_file(request, path)
-  elif path.endswith('.json'):
-    return get_json_file(request, path)
-  else:
-    return badRequest(web, 'invalid file name', 400)
-  
+# test:
+# curl -X POST -H "Content-Type: application/json" -d @test/test1.json http://localhost:9191/api/v1/fetchData
+async def fetchData(request):
+  # get the json file from the request
+  try:
+    data = await request.json()
+    print('data', data)
+    pipeline = data['steps']
+    print('steps', pipeline)
+    base_dir = '../../files'
+    transformed_df = apply_pipeline(pipeline, base_dir)
+    res_json = transformed_df.to_json(orient='records', index=True)
+    return web.Response(text=res_json)
+  except Exception as e:
+    return badRequest(web, f"An error occurred: {str(e)}", 400)
 
 # curl -F "file=@test3.csv" http://192.168.2.1:9191/api/v1/csv/upload
 # gzip -c test3_big.csv | curl -X POST  -H "Content-Type: multipart/form-data" -F "file=@-;filename=test3_big.csv.gz" http://192.168.2.1:9191/api/v1/csv/test3_big/upload
@@ -156,7 +159,7 @@ def main(argv):
     if opt in ("--port"):
       port = int(arg)
 
-  app.add_routes([web.get('/api/v1/{id}', get_file),
+  app.add_routes([web.post('/api/v1/fetchData', fetchData),
                   web.post('/api/v1/csv/upload', handle_file_upload)])
   web.run_app(app, port=port, host=host)
     
