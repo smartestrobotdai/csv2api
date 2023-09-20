@@ -1,0 +1,13 @@
+{
+  "steps": [
+    {
+      "action": "open",
+      "source": "test3.csv",
+      "delimiter": ","
+    },
+    {
+      "action": "append",
+      "values": ["123", "admin", "yes"]
+    }
+  ]
+}

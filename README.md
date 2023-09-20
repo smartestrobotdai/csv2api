@@ -5,6 +5,11 @@ config example:
 {
   "steps": [
     {
+      "action": "open",
+      "source": "problem_descriptions_joined.csv",
+      "delimiter": ","
+    },
+    {
       "action": "select_columns",
       "columns": ["col1", "col3", "col5"]
     },
@@ -38,6 +43,20 @@ config example:
         }
       ],
       "condition_logic": "and"
+    },
+  ]
+}
+
+putData: 
+{
+  'steps': [
+    {
+      "action": "open",
+      "source": "answers.csv",
+    },
+    {
+      "action": "append",
+      "values": ["123", "admin", "yes"]
     }
   ]
 }

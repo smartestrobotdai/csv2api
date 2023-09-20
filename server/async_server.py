@@ -114,6 +114,7 @@ async def fetchData(request):
     return web.Response(text=res_json)
   except Exception as e:
     return badRequest(web, f"An error occurred: {str(e)}", 400)
+  
 
 # curl -F "file=@test3.csv" http://192.168.2.1:9191/api/v1/csv/upload
 # gzip -c test3_big.csv | curl -X POST  -H "Content-Type: multipart/form-data" -F "file=@-;filename=test3_big.csv.gz" http://192.168.2.1:9191/api/v1/csv/test3_big/upload
@@ -161,6 +162,7 @@ def main(argv):
 
   app.add_routes([web.post('/api/v1/fetchData', fetchData),
                   web.post('/api/v1/csv/upload', handle_file_upload)])
+  
   web.run_app(app, port=port, host=host)
     
 if __name__ == '__main__':
